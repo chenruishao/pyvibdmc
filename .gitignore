@@ -136,3 +136,7 @@ pyvibdmc/tests/adiabatic_results/*
 pyvibdmc/tests/exSimResults/*
 dw_tracker*
 *lambda.npy
+
+# File limited for development purposes
+AGENT_BACKGROUND.md
+STATIC_ANALYSIS.md
