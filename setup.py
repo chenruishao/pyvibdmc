@@ -4,7 +4,6 @@ A general purpose diffusion monte carlo code for studying vibrational problems
 """
 import sys
 from setuptools import setup, find_packages
-import versioneer
 
 short_description = __doc__.split("\n")
 
@@ -27,8 +26,8 @@ setup(
     description=short_description[0],
     long_description=long_description,
     long_description_content_type="text/markdown",
-    version=versioneer.get_version(),
-    cmdclass=versioneer.get_cmdclass(),
+    use_scm_version=True,
+    setup_requires=['setuptools_scm'] + pytest_runner,
     license='MIT',
 
     # Which Python importable modules should be included when your package is installed
@@ -40,9 +39,6 @@ setup(
     # Customize MANIFEST.in if the general case does not suit your needs
     # Comment out this line to prevent the files from being packaged with your software
     include_package_data=True,
-
-    # Allows `setup.py test` to work correctly with pytest
-    setup_requires=[] + pytest_runner,
 
     # install_requires=[],              # Required packages, pulls from pip if needed; do not use for Conda deployment
 

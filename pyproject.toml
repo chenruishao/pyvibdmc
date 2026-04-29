@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools>=80", "setuptools-scm[simple]>=9.2"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pyvibdmc"
+authors = [
+    {name = "Ryan DiRisio", email = "rjdiri@uw.edu"}
+]
+dynamic = ["version"]
+description = "PyVibDMC, A general purpose diffusion monte carlo code for studying vibrational problems"
+readme = "README.md"
+license = {text = "MIT"}
+requires-python = ">=3.9"
+
+classifiers = [
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: MacOS :: MacOS X",
+    "Operating System :: Unix",
+    "Operating System :: Microsoft :: Windows",
+]
+
+[project.urls]
+Homepage = "http://pyvibdmc.readthedocs.io/"
+
+[tool.setuptools_scm]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["*"]
+exclude = []
+
+[tool.setuptools.package-data]
+"*" = ["*"]
