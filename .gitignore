@@ -140,3 +140,4 @@ dw_tracker*
 # File limited for development purposes
 AGENT_BACKGROUND.md
 STATIC_ANALYSIS.md
+CONDA_ENVIRONMENTS.md
