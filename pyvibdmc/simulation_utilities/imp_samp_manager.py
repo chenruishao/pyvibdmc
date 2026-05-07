@@ -17,6 +17,7 @@ class ImpSampManager:
                  trial_directory,
                  python_file,
                  pot_manager,
+                 imp_num_cores=None,
                  pass_timestep=False,
                  new_pool_num_cores=None,
                  deriv_function=None,
@@ -29,36 +30,54 @@ class ImpSampManager:
         self.trial_kwargs = trial_kwargs
         self.deriv_kwargs = deriv_kwargs
         self.pot_manager = pot_manager
+        self.imp_num_cores = imp_num_cores
         self.pass_timestep = pass_timestep
         self.nomp_pool_cores = new_pool_num_cores  # Only when one wants to do multiprocessing importance sampling with noMP potential (like NN-DMC)
+        self._owns_pool = False
         if self.pass_timestep:
             self.ct = 0
             self.trial_kwargs['timestep']=0
             self.deriv_kwargs['timestep']=0
 
-        if isinstance(self.pot_manager, Potential):
-            self.pool = self.pot_manager.pool
-            self.num_cores = self.pot_manager.num_cores
-            self._reinit_pool()
-        elif (isinstance(self.pot_manager, Potential_NoMP) or isinstance(self.pot_manager,
-                                                                         NN_Potential)) and self.nomp_pool_cores is not None:
-            """Really only for NN_Potential using multi-core imp samp"""
-            from multiprocessing import Pool
-            self.pool = Pool(self.nomp_pool_cores)
-            self.num_cores = self.nomp_pool_cores
-            self._reinit_pool()
+        self._initialize_pool()
 
     def __getstate__(self):
         """Since pool is a variable inside this class, the object cannot be pickled + used for multiprocessing.
         The solution is to use __getstate__/__setstate, which will delete the pool and pot_manager internally
          when needed."""
         self_dict = self.__dict__.copy()
-        del self_dict['pool']
-        del self_dict['pot_manager']
+        self_dict.pop('pool', None)
+        self_dict.pop('pot_manager', None)
         return self_dict
 
     def __setstate__(self, state):
         self.__dict__.update(state)
+
+    def _initialize_pool(self):
+        if self.imp_num_cores is None:
+            if isinstance(self.pot_manager, Potential):
+                self.pool = self.pot_manager.pool
+                self.num_cores = self.pot_manager.num_cores
+                self._reinit_pool()
+                return
+            if isinstance(self.pot_manager, (Potential_NoMP, NN_Potential)) and self.nomp_pool_cores is not None:
+                self._create_pool(self.nomp_pool_cores)
+                return
+        else:
+            self._create_pool(self.imp_num_cores)
+            return
+
+        raise ValueError("ImpSampManager requires a multiprocessing pool. Pass a Potential manager, "
+                         "set imp_num_cores, or use new_pool_num_cores with Potential_NoMP/NN_Potential.")
+
+    def _create_pool(self, num_cores):
+        from multiprocessing import Pool
+        if num_cores <= 0:
+            raise ValueError("ImpSampManager requires num_cores > 0.")
+        self.pool = Pool(num_cores)
+        self.num_cores = num_cores
+        self._owns_pool = True
+        self._reinit_pool()
 
     def _init_wfn_mp(self, chdir=False):
         """Import the python functions of the pool workers on the pool.
@@ -87,11 +106,17 @@ class ImpSampManager:
         """Imports the appropriate modules that are in the potential_manager directory"""
         empt = [() for _ in range(self.num_cores)]
         self._init_wfn_mp(chdir=True)
-        self.pot_manager.pool.starmap(self._init_wfn_mp, empt, chunksize=1)
+        self.pool.starmap(self._init_wfn_mp, empt, chunksize=1)
+
+    def mp_close(self):
+        if self._owns_pool and self.pool is not None:
+            self.pool.close()
+            self.pool.join()
+            self.pool = None
 
     def call_trial(self, cds):
         """Get trial wave function using multiprocessing"""
-        cds = np.array_split(cds, self.pot_manager.num_cores)
+        cds = np.array_split(cds, self.num_cores)
         if self.trial_kwargs is not None:
             res = self.pool.starmap(self.trial_wfn, zip(cds, repeat(self.trial_kwargs, len(cds))))
         else:

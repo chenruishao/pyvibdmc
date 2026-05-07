@@ -6,6 +6,79 @@ import numpy as np
 sim_ex_dir = "imp_samp_results"
 
 
+def test_imp_manager_defaults_to_potential_pool():
+    potDir = os.path.join(os.path.dirname(__file__), '../sample_potentials/PythonPots/')
+    harm_pot = pv.Potential(potential_function='oh_stretch_harm',
+                            python_file='harmonicOscillator1D.py',
+                            potential_directory=potDir,
+                            num_cores=2)
+
+    impo = pv.ImpSampManager(trial_function='trial_harm',
+                             trial_directory=potDir,
+                             python_file='harm_trial_wfn.py',
+                             pot_manager=harm_pot,
+                             deriv_function='derivative')
+
+    try:
+        assert impo.pool is harm_pot.pool
+        assert impo.num_cores == harm_pot.num_cores
+        trial = impo.call_trial(np.zeros((4, 1, 1)))
+        assert trial.shape == (4,)
+    finally:
+        harm_pot.mp_close()
+
+
+def test_imp_manager_uses_explicit_imp_pool_size():
+    potDir = os.path.join(os.path.dirname(__file__), '../sample_potentials/PythonPots/')
+    harm_pot = pv.Potential(potential_function='oh_stretch_harm',
+                            python_file='harmonicOscillator1D.py',
+                            potential_directory=potDir,
+                            num_cores=2)
+
+    impo = pv.ImpSampManager(trial_function='trial_harm',
+                             trial_directory=potDir,
+                             python_file='harm_trial_wfn.py',
+                             pot_manager=harm_pot,
+                             imp_num_cores=1,
+                             deriv_function='derivative')
+
+    try:
+        assert impo.pool is not harm_pot.pool
+        assert impo.num_cores == 1
+        trial = impo.call_trial(np.zeros((4, 1, 1)))
+        derivz, sderivz = impo.call_derivs(np.zeros((4, 1, 1)))
+        assert trial.shape == (4,)
+        assert derivz.shape == (4, 1, 1)
+        assert sderivz.shape == (4, 1, 1)
+    finally:
+        impo.mp_close()
+        harm_pot.mp_close()
+
+
+def test_imp_manager_nomp_pool_override():
+    potDir = os.path.join(os.path.dirname(__file__), '../sample_potentials/PythonPots/')
+    harm_pot = pv.Potential_NoMP(potential_function='oh_stretch_harm',
+                                 python_file='harmonicOscillator1D.py',
+                                 potential_directory=potDir)
+
+    impo = pv.ImpSampManager(trial_function='trial_harm',
+                             trial_directory=potDir,
+                             python_file='harm_trial_wfn.py',
+                             pot_manager=harm_pot,
+                             new_pool_num_cores=2,
+                             deriv_function='derivative')
+
+    try:
+        trial = impo.call_trial(np.zeros((4, 1, 1)))
+        derivz, sderivz = impo.call_derivs(np.zeros((4, 1, 1)))
+        assert impo.num_cores == 2
+        assert trial.shape == (4,)
+        assert derivz.shape == (4, 1, 1)
+        assert sderivz.shape == (4, 1, 1)
+    finally:
+        impo.mp_close()
+
+
 def test_run_dmc_short():
     import shutil
     if os.path.isdir(sim_ex_dir):
