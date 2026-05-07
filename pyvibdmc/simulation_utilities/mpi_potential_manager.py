@@ -67,9 +67,7 @@ class MPI_Potential:
         if timeit:
             start = time.time()
         with MPICommExecutor() as executor:
-            result = executor.map(self.initwrapper,
-                                  cds,
-                                  chunksize=self.num_mpi)
+            result = executor.map(self.initwrapper, cds, chunksize=self.num_mpi)
             v = np.array(list(result))
             v = np.squeeze(v)
 
