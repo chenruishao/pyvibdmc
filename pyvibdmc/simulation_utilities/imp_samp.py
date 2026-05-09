@@ -21,8 +21,15 @@ class ImpSamp:
     def drift(self, cds):
         """Internally returns (dpsi/psi), since it's more convenient in the workflow.
         Also returns second derivatives divided by psi"""
+        # TODO: Look into self.trial and self.im.call_derivs to remove redundant trial_wavefunction() calls
         psi_t = self.trial(cds)
         deriv, sderiv = self.imp_manager.call_derivs(cds)  # num_walkers, num_atoms, 3 array [or (num_walkers, 1, 1) for 1D]
+        return deriv, psi_t, sderiv
+
+    def drift_serial(self, cds):
+        """Serial drift path for code that is already running inside a parallel worker."""
+        psi_t = self.imp_manager.call_trial_no_mp(cds)
+        deriv, sderiv = self.imp_manager.call_derivs_no_mp(cds)
         return deriv, psi_t, sderiv
 
     @staticmethod

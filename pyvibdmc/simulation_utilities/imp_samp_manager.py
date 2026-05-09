@@ -74,6 +74,9 @@ class ImpSampManager:
         from multiprocessing import Pool
         if num_cores <= 0:
             raise ValueError("ImpSampManager requires num_cores > 0.")
+        # TODO: Creating multiprocessing pools from an already multithreaded
+        # process can degrade performance and may deadlock with fork-based
+        # start methods. Consider spawn/forkserver or centralized pool creation.
         self.pool = Pool(num_cores)
         self.num_cores = num_cores
         self._owns_pool = True
@@ -132,6 +135,19 @@ class ImpSampManager:
         else:
             trial = self.trial_wfn(cds, self.trial_kwargs)
         return trial
+
+    def call_derivs_no_mp(self, cds):
+        """Get importance-sampling derivatives without dispatching to a multiprocessing pool."""
+        if self.all_finite:
+            derivz, sderivz, trial_wfn = self.derivs(cds, trial_func=self.call_trial_no_mp)
+            derivz = derivz / trial_wfn[:, np.newaxis, np.newaxis]
+            sderivz = sderivz / trial_wfn[:, np.newaxis, np.newaxis]
+        else:
+            if self.deriv_kwargs is None:
+                derivz, sderivz = self.derivs(cds)
+            else:
+                derivz, sderivz = self.derivs(cds, self.deriv_kwargs)
+        return derivz, sderivz
 
     def call_derivs(self, cds):
         """For when derivatives are not supplied, call finite difference function.
@@ -224,6 +240,10 @@ class ImpSampManager_NoMP:
         trial = self.call_imp_func(self.trial, cds, self.trial_kwargs)
         return trial
 
+    def call_trial_no_mp(self, cds):
+        """Call trial wave function without parallel dispatch."""
+        return self.call_trial(cds)
+
     def call_derivs(self, cds):
         """For when derivatives are not supplied, call finite difference function.
         Returns derivatives divided by psi already"""
@@ -246,4 +266,14 @@ class ImpSampManager_NoMP:
             self.ct+=1
             self.trial_kwargs['timestep'] = self.ct
             self.deriv_kwargs['timestep'] = self.ct
+        return derivz, sderivz
+
+    def call_derivs_no_mp(self, cds):
+        """Get importance-sampling derivatives without parallel dispatch."""
+        if self.all_finite:
+            derivz, sderivz, trial_wfn = self.derivs(cds, trial_func=self.call_trial_no_mp)
+            derivz = derivz / trial_wfn[:, np.newaxis, np.newaxis]
+            sderivz = sderivz / trial_wfn[:, np.newaxis, np.newaxis]
+        else:
+            derivz, sderivz = self.call_imp_func(self.derivs, cds, self.deriv_kwargs)
         return derivz, sderivz
