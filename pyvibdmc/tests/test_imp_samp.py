@@ -79,6 +79,45 @@ def test_imp_manager_nomp_pool_override():
         impo.mp_close()
 
 
+def test_drift_serial_matches_multiprocessing_drift():
+    potDir = os.path.join(os.path.dirname(__file__), '../sample_potentials/PythonPots/')
+    harm_pot = pv.Potential(potential_function='oh_stretch_harm',
+                            python_file='harmonicOscillator1D.py',
+                            potential_directory=potDir,
+                            num_cores=2)
+
+    impo = pv.ImpSampManager(trial_function='trial_harm',
+                             trial_directory=potDir,
+                             python_file='harm_trial_wfn.py',
+                             pot_manager=harm_pot,
+                             deriv_function='derivative')
+
+    try:
+        imp = pv.ImpSamp(impo)
+        cds = np.linspace(-0.2, 0.3, 6).reshape(6, 1, 1)
+        drift_vals = imp.drift(cds)
+        serial_vals = imp.drift_serial(cds)
+        for drift_val, serial_val in zip(drift_vals, serial_vals):
+            np.testing.assert_allclose(serial_val, drift_val)
+    finally:
+        harm_pot.mp_close()
+
+
+def test_drift_serial_matches_nomp_drift_with_finite_difference():
+    potDir = os.path.join(os.path.dirname(__file__), '../sample_potentials/PythonPots/')
+    impo = pv.ImpSampManager_NoMP(trial_function='trial_harm',
+                                  trial_directory=potDir,
+                                  python_file='harm_trial_wfn.py',
+                                  chdir=True)
+
+    imp = pv.ImpSamp(impo)
+    cds = np.linspace(-0.2, 0.3, 6).reshape(6, 1, 1)
+    drift_vals = imp.drift(cds)
+    serial_vals = imp.drift_serial(cds)
+    for drift_val, serial_val in zip(drift_vals, serial_vals):
+        np.testing.assert_allclose(serial_val, drift_val)
+
+
 def test_run_dmc_short():
     import shutil
     if os.path.isdir(sim_ex_dir):
