@@ -119,3 +119,16 @@ class MPI_ImpSampManager:
             self.trial_kwargs['timestep'] = self.ct
             self.deriv_kwargs['timestep'] = self.ct
         return derivz, sderivz
+
+    def call_derivs_no_mp(self, cds):
+        """Get importance-sampling derivatives without dispatching through MPI."""
+        if self.all_finite:
+            derivz, sderivz, trial_wfn = self.derivs(cds, trial_func=self.call_trial_no_mp)
+            derivz = derivz / trial_wfn[:, np.newaxis, np.newaxis]
+            sderivz = sderivz / trial_wfn[:, np.newaxis, np.newaxis]
+        else:
+            if self.deriv_kwargs is None:
+                derivz, sderivz = self.derivs(cds)
+            else:
+                derivz, sderivz = self.derivs(cds, self.deriv_kwargs)
+        return derivz, sderivz
