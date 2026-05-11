@@ -11,6 +11,7 @@ from .simulation_utilities.Constants import *
 from .simulation_utilities.sim_logger import *
 from .simulation_utilities.imp_samp_manager import *
 from .simulation_utilities.imp_samp import *
+from .simulation_utilities.imp_move_parallel import imp_move_randomly_data_parallel as _imp_move_randomly_data_parallel
 
 __all__ = ['DMC_Sim', 'dmc_restart']
 
@@ -534,6 +535,12 @@ class DMC_Sim:
 
         num_rejctions = len(self._walker_coords) - len(accept)
         return num_rejctions
+
+    def imp_move_randomly_data_parallel(self):
+        """
+        Importance-sampling random displacement split over the importance-sampling worker pool.
+        """
+        return _imp_move_randomly_data_parallel(self)
 
     def imp_move_randomly_second_type(self):
         """
