@@ -808,7 +808,10 @@ class DMC_Sim:
 
     def run(self):
         """This function calls propagate and saves simulation results"""
-        print("Starting Simulation...")
+        try:
+            print("Starting Simulation...")
+        except OSError:
+            pass
         dmc_time_start = time.time()
         try:
             throw_error = None
