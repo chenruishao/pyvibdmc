@@ -391,6 +391,68 @@ class DMC_Sim:
 
         if self.weighting == 'discrete':
             rand_nums = np.random.random(len(self._walker_coords))
+            weights = np.exp(-1. * (self._walker_pots - self._vref) * dt)
+            if not np.all(np.isfinite(weights)) or np.any(weights > self._pop_thresh[1] + 1):
+                raise ValueError("Massive walker birth or death event!!!!!!! Dying...")
+
+            counts = np.floor(weights).astype(np.int64)
+            counts += rand_nums < (weights - counts)
+
+            num_deaths = int(np.count_nonzero(counts == 0))
+            num_births = int(np.sum(np.maximum(counts - 1, 0)))
+            final_pop = int(np.sum(counts))
+
+            if final_pop < self._pop_thresh[0] or final_pop > self._pop_thresh[1]:
+                raise ValueError("Massive walker birth or death event!!!!!!! Dying...")
+
+            self._walker_coords = np.repeat(self._walker_coords, counts, axis=0)
+            self._walker_pots = np.repeat(self._walker_pots, counts, axis=0)
+            if self.impsamp_manager is not None:
+                self.f_x = np.repeat(self.f_x, counts, axis=0)
+                self.psi_1 = np.repeat(self.psi_1, counts, axis=0)
+                self.psi_sec_der = np.repeat(self.psi_sec_der, counts, axis=0)
+                if self.excited_state_imp_samp:
+                    self.vector_score = np.repeat(self.vector_score, counts, axis=0)
+            if self._desc_wt:
+                self._who_from = np.repeat(self._who_from, counts, axis=0)
+            return num_births, num_deaths, len(self._walker_pots)
+        else:
+            self._cont_wts *= np.exp(-1.0 * (self._walker_pots - self._vref) * dt)
+
+            # branch if weights are too low
+            kill_mark = np.where(self._cont_wts < self._thresh_lower)[0]
+            self._branch(kill_mark)
+
+            # branch more if there are weights that are too high
+            if self._thresh_upper is not None:
+                num_above_thresh = np.sum(
+                    self._cont_wts > self._thresh_upper)  # now, see if any weights are still too big
+                kill_mark_upper = np.argpartition(self._cont_wts, num_above_thresh)[
+                                  :num_above_thresh]  # get the num_above_thresh smallest wts
+                self._branch(kill_mark_upper)
+            else:
+                kill_mark_upper = []
+
+            # logging info
+            num_branched = len(kill_mark) + len(kill_mark_upper)
+            max_weght = np.amax(self._cont_wts)
+            min_weght = np.amin(self._cont_wts)
+
+            return num_branched, max_weght, min_weght
+
+    def birth_or_death_old(self):
+        """
+        Chooses whether or not the walker made a bad enough random walk to be removed from the simulation.
+        For discrete weighting, this leads to removal or duplication of the walkers.  For continuous, this leads
+        to an update of the weights and a potential branching of a large weight walker to the smallest one
+        :return: Updated Continus Weights , the "who from" array for desc_wt_timeendent weighting, walker coords, and pot vals.
+         """
+        dt = self.delta_t
+        if self.impsamp_manager is not None:
+            dt = self.update_effetive_timestep()
+
+        if self.weighting == 'discrete':
+            rand_nums = np.random.random(len(self._walker_coords))
 
             death_mask = np.logical_or((1 - np.exp(-1. * (self._walker_pots - self._vref) * dt)) < rand_nums,
                                        self._walker_pots < self._vref)
