@@ -870,7 +870,10 @@ class DMC_Sim:
 
     def run(self):
         """This function calls propagate and saves simulation results"""
-        print("Starting Simulation...")
+        try:
+            print("Starting Simulation...")
+        except OSError:
+            pass
         dmc_time_start = time.time()
         try:
             throw_error = None
@@ -893,8 +896,11 @@ class DMC_Sim:
             # Convert vref vs tau to wavenumbers
             _vref_wvn = Constants.convert(self._vref_vs_tau, "wavenumbers", to_AU=False)
 
-            print("Simulation Complete")
-            print('Approximate ZPE', np.average(_vref_wvn[len(_vref_wvn) // 4:]))
+            try:
+                print("Simulation Complete")
+                print('Approximate ZPE', np.average(_vref_wvn[len(_vref_wvn) // 4:]))
+            except OSError:
+                pass
             if self.impsamp_manager is not None:
                 """Replace discrete integers with the effective time step put forth by the metropolis criteria"""
                 ts = self.eff_ts
