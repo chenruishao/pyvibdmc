@@ -400,7 +400,9 @@ class DMC_Sim:
                 # before count conversion/allocation can fail, causing an allocation or OOM failure.
                 raise ValueError("Massive walker birth or death event!!!!!!! Dying...")
 
-            counts = np.floor(weights).astype(np.int64)
+            # TODO: Benchmark int32 vs int64 here. int32 should be sufficient for
+            # walker counts below the population threshold and uses less memory.
+            counts = np.floor(weights).astype(np.int32)
             counts += rand_nums < (weights - counts)
 
             num_deaths = int(np.count_nonzero(counts == 0))
