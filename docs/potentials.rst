@@ -29,10 +29,19 @@ do this. The only argument you need to use in order to take advantage of this is
                           potential_directory=pot_dir,
                           num_cores=2)
 
-The ``num_cores`` parameter specifies the number of Python processes one would spawn at the beginning of
-the DMC simulation. Each Python process takes up 1 core. If you are working with a 16-core CPU,
-perhaps use 10 to 12 cores for maximum performance if you are only running one calculation at once.
-The number of walkers does NOT need to be divisible by the number of cores/processes.
+The ``num_cores`` parameter specifies the number of worker processes used for potential energy calls.
+When the same ``Potential`` object is also used with ``ImpSampManager()``, the importance sampler creates
+a separate pool with the same number of worker processes for trial-wavefunction and derivative calls.
+DMC propagation uses the potential and importance-sampling pools sequentially, but both pools remain
+resident in memory. Setting a separate number of cores in ``ImpSampManager(imp_num_cores=...)`` is
+possible and recommended for workloads involving neural network potentials, as it is recommended to
+perform neural network inference with only 1 core for faster inference (as it avoids overhead associated
+with division / concatenation of data and have less padding overheads) and less VRAM consumption.
+
+Close both pools after the simulation with ``imp_samp.mp_close()`` and ``potential.mp_close()``.
+Each Python process takes up 1 core. The number of walkers does not need to be divisible by the number
+of cores/processes.
+
 If this is run on a laptop with 4 cores, only using 2 cores is recommended.
 
 If you explicity do NOT want to use multiprocessing for some reason, such as the parallelization is done elsewhere,

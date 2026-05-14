@@ -33,7 +33,9 @@ difference.
 
 IMPORTANT REQUIREMENTS:
 
-* The potential manager is responsible for setting up the parallelization in the importance sampling. If one is using multiprocessing in the potential manager, the importance sampling will be parallelized using multiprocessing, MPI for MPI, and single-core for single-core.
+* The potential manager is responsible for setting up the parallelization in the importance sampling. If one is using multiprocessing in the potential manager, the importance sampling will be parallelized with a separate multiprocessing pool, MPI for MPI, and single-core for single-core.
+
+  * With ``Potential`` and ``ImpSampManager``, ``Potential(num_cores=...)`` controls the potential-only pool. ``ImpSampManager(imp_num_cores=...)`` controls the importance-sampling-only pool and defaults to ``Potential.num_cores`` if not provided. DMC propagation uses these pools sequentially, so active CPU use is bounded by the currently running operation, while resident memory includes both pools.
 
   * The one exception to this rule is when using a NN_Potential. One can pass the ``new_pool_num_cores`` argument in order to use ImpSampManager, which uses multiprocessing, if using Potential_NoMP or NN_Potential.
 
@@ -68,12 +70,13 @@ easily be used with PyVibDMC::
     water_pot = pv.Potential(potential_function=pot_func,
                           python_file=py_file,
                           potential_directory=pot_dir,
-                          num_cores=2) #potential and impsamp will both use the same pool of workers
+                          num_cores=2) #potential uses its own pool of workers
 
     water_imp = pv.ImpSampManager(trial_function,
                          trial_directory, #same as potential_directory
                          python_file,
                          pot_manager=water_pot,
+                         imp_num_cores=..., #optional, separate pool size; defaults to Potential.num_cores
                          deriv_function=..., #optional string like trial_function
                          trial_kwargs=..., #May pass a dict with important things to trial function call
                          deriv_kwargs=..., #May pass a dict with important things to deriv function call - only use if deriv_function is set to something
@@ -84,6 +87,10 @@ easily be used with PyVibDMC::
                         # imp_samp_oned=False, # only true if DMC sim is on 1D problem.
                                                # Defaults to False.
                         ...)
+
+    # Close both multiprocessing pools after the simulation finishes.
+    water_imp.mp_close()
+    water_pot.mp_close()
 
 Examples of a trial wavefunction (and derivatives) can be found in the Partridge Schwenke sample potential ``h2o_trial.py`` or the
 harmonic oscillator sample potential ``harm_trial_wfn.py``.
