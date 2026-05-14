@@ -6,7 +6,7 @@ import numpy as np
 sim_ex_dir = "imp_samp_results"
 
 
-def test_imp_manager_defaults_to_potential_pool():
+def test_imp_manager_defaults_to_exclusive_pool_matching_potential_size():
     potDir = os.path.join(os.path.dirname(__file__), '../sample_potentials/PythonPots/')
     harm_pot = pv.Potential(potential_function='oh_stretch_harm',
                             python_file='harmonicOscillator1D.py',
@@ -20,11 +20,12 @@ def test_imp_manager_defaults_to_potential_pool():
                              deriv_function='derivative')
 
     try:
-        assert impo.pool is harm_pot.pool
+        assert impo.pool is not harm_pot.pool
         assert impo.num_cores == harm_pot.num_cores
         trial = impo.call_trial(np.zeros((4, 1, 1)))
         assert trial.shape == (4,)
     finally:
+        impo.mp_close()
         harm_pot.mp_close()
 
 
@@ -45,6 +46,7 @@ def test_imp_manager_uses_explicit_imp_pool_size():
     try:
         assert impo.pool is not harm_pot.pool
         assert impo.num_cores == 1
+        assert harm_pot.num_cores == 2
         trial = impo.call_trial(np.zeros((4, 1, 1)))
         derivz, sderivz = impo.call_derivs(np.zeros((4, 1, 1)))
         assert trial.shape == (4,)
@@ -53,6 +55,45 @@ def test_imp_manager_uses_explicit_imp_pool_size():
     finally:
         impo.mp_close()
         harm_pot.mp_close()
+
+
+def test_exclusive_pools_use_their_own_core_counts(tmp_path):
+    potential_file = tmp_path / "chunk_probe_potential.py"
+    trial_file = tmp_path / "chunk_probe_trial.py"
+    potential_file.write_text(
+        "import numpy as np\n\n"
+        "def chunk_size_potential(cds):\n"
+        "    return np.repeat(len(cds), len(cds))\n"
+    )
+    trial_file.write_text(
+        "import numpy as np\n\n"
+        "def chunk_size_trial(cds):\n"
+        "    return np.repeat(len(cds), len(cds))\n"
+    )
+
+    pot = pv.Potential(potential_function='chunk_size_potential',
+                       python_file=potential_file.name,
+                       potential_directory=str(tmp_path),
+                       num_cores=1)
+    impo = pv.ImpSampManager(trial_function='chunk_size_trial',
+                             trial_directory=str(tmp_path),
+                             python_file=trial_file.name,
+                             pot_manager=pot,
+                             imp_num_cores=4)
+
+    try:
+        potential_pool = pot.pool
+        imp_pool = impo.pool
+        assert impo.pool is not pot.pool
+        assert pot.num_cores == 1
+        assert impo.num_cores == 4
+        np.testing.assert_array_equal(pot.getpot(np.zeros((8, 1, 1))), np.repeat(8, 8))
+        np.testing.assert_array_equal(impo.call_trial(np.zeros((8, 1, 1))), np.repeat(2, 8))
+        assert pot.pool is potential_pool
+        assert impo.pool is imp_pool
+    finally:
+        impo.mp_close()
+        pot.mp_close()
 
 
 def test_imp_manager_nomp_pool_override():

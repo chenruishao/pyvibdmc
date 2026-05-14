@@ -54,12 +54,12 @@ class ImpSampManager:
         self.__dict__.update(state)
 
     def _initialize_pool(self):
+        if isinstance(self.pot_manager, Potential):
+            num_cores = self.pot_manager.num_cores if self.imp_num_cores is None else self.imp_num_cores
+            self._create_pool(num_cores)
+            return
+
         if self.imp_num_cores is None:
-            if isinstance(self.pot_manager, Potential):
-                self.pool = self.pot_manager.pool
-                self.num_cores = self.pot_manager.num_cores
-                self._reinit_pool()
-                return
             if isinstance(self.pot_manager, (Potential_NoMP, NN_Potential)) and self.nomp_pool_cores is not None:
                 self._create_pool(self.nomp_pool_cores)
                 return

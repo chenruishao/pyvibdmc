@@ -60,7 +60,14 @@ class Potential:
         if self.num_cores <= 0:
             print('Weird number of cores specified. Defaulting to 1...')
             self.num_cores = 1
-        self._potPool = mp.Pool(self.num_cores, initializer=self._init_pot())
+        # TODO: mp.Pool() still uses the platform default start method. On
+        # Python 3.12/Linux this may fork from a multithreaded parent and warn
+        # or deadlock; Python 3.14 changes the POSIX default to forkserver, but
+        # this class is not forkserver/spawn-safe because workers rely on
+        # inheriting the parent-imported self._pot. Refactor to use an explicit
+        # context, a worker initializer, and a module-level worker call wrapper.
+        self._init_pot()
+        self._potPool = mp.Pool(self.num_cores)
         os.chdir(self._curdir)
 
     @property
@@ -102,6 +109,7 @@ class Potential:
         if self._potPool is not None:
             self._potPool.close()
             self._potPool.join()
+            self._potPool = None
 
 
 class Potential_NoMP:
