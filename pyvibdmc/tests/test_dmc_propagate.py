@@ -1,11 +1,15 @@
 import os
 import random
 import sys
-from importlib import metadata
 from pathlib import Path
 
 import numpy as np
 import pytest
+
+try:
+    from importlib import metadata
+except ImportError:
+    import importlib_metadata as metadata
 
 
 PROPAGATE_SEED = 8675309
