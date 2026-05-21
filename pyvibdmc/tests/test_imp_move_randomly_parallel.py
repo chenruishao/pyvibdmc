@@ -41,7 +41,8 @@ def _dmc_sim(tmp_path,
              num_walkers,
              trial_directory=None,
              python_file="harm_trial_wfn.py",
-             pass_timestep=False):
+             pass_timestep=False,
+             use_data_parallel_imp_move=False):
     potential = _harmonic_potential(potential_num_cores)
     imp_samp = _importance_sampler(potential,
                                    imp_num_cores=imp_num_cores,
@@ -63,6 +64,7 @@ def _dmc_sim(tmp_path,
                      potential=potential,
                      imp_samp=imp_samp,
                      imp_samp_oned=True,
+                     use_data_parallel_imp_move=use_data_parallel_imp_move,
                      log_every=1,
                      start_structures=start_structures,
                      cur_timestep=0)
@@ -207,3 +209,56 @@ def test_imp_move_randomly_data_parallel_pass_timestep_matches_existing_method(t
     finally:
         _close_sim(old_sim, old_imp, old_potential)
         _close_sim(new_sim, new_imp, new_potential)
+
+
+def test_use_data_parallel_imp_move_flag_routes_standard_importance_move(tmp_path, monkeypatch):
+    sim, imp_samp, potential = _dmc_sim(tmp_path,
+                                        "flag_route",
+                                        1,
+                                        1,
+                                        8,
+                                        use_data_parallel_imp_move=True)
+    calls = []
+
+    def fake_parallel_move():
+        calls.append("parallel")
+        return 3
+
+    def fail_old_move():
+        raise AssertionError("standard imp_move_randomly should not be called")
+
+    monkeypatch.setattr(sim, "imp_move_randomly_data_parallel", fake_parallel_move)
+    monkeypatch.setattr(sim, "imp_move_randomly", fail_old_move)
+    try:
+        assert sim.use_data_parallel_imp_move is True
+        rejected = sim._imp_move_randomly_selected()
+        assert rejected == 3
+        assert calls == ["parallel"]
+    finally:
+        _close_sim(sim, imp_samp, potential)
+
+
+def test_data_parallel_imp_move_flag_rejects_second_displacement(tmp_path):
+    potential = _harmonic_potential(1)
+    imp_samp = _importance_sampler(potential, imp_num_cores=1)
+    start_structures = np.zeros((4, 1, 1))
+    with pytest.raises(ValueError, match="use_data_parallel_imp_move"):
+        pv.DMC_Sim(sim_name="invalid_parallel_second_type",
+                   output_folder=str(tmp_path / "invalid_parallel_second_type"),
+                   weighting="discrete",
+                   num_walkers=4,
+                   num_timesteps=1,
+                   equil_steps=1,
+                   chkpt_every=100,
+                   wfn_every=100,
+                   desc_wt_steps=1,
+                   atoms=["O-H"],
+                   delta_t=1,
+                   potential=potential,
+                   imp_samp=imp_samp,
+                   imp_samp_oned=True,
+                   second_impsamp_displacement=True,
+                   use_data_parallel_imp_move=True,
+                   start_structures=start_structures)
+    imp_samp.mp_close()
+    potential.mp_close()

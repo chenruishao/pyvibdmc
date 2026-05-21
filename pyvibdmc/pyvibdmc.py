@@ -61,6 +61,9 @@ class DMC_Sim:
     :type DEBUG_save_desc_wt_tracker: bool
     :param DEBUG_save_training_every: If true, will collect coordinates and energies every n time steps
     :type DEBUG_save_training_every: int
+    :param use_data_parallel_imp_move: If true, use the opt-in data-parallel implementation for the standard
+        importance-sampling random move.
+    :type use_data_parallel_imp_move: bool
     :param DEBUG_mass_change: Dictionary that will scale the mass every change_every steps. The scaling factor_per_change can be an array or an int/float
     "type DEBUG_mass_change: dict
     """
@@ -88,6 +91,7 @@ class DMC_Sim:
                  imp_samp=None,
                  imp_samp_oned=False,
                  second_impsamp_displacement=False,
+                 use_data_parallel_imp_move=False,
                  excited_state_imp_samp = False,
                  adiabatic_dmc=None,
                  fixed_node=None,
@@ -120,6 +124,10 @@ class DMC_Sim:
         self.impsamp_manager = imp_samp
         self.imp1d = imp_samp_oned
         self.second_impsamp_displacement = second_impsamp_displacement
+        self.use_data_parallel_imp_move = use_data_parallel_imp_move
+        if self.second_impsamp_displacement and self.use_data_parallel_imp_move:
+            raise ValueError("use_data_parallel_imp_move is only supported with the standard "
+                             "importance-sampling displacement path. Set second_impsamp_displacement=False.")
         self.adiabatic_dmc = adiabatic_dmc
         self.fixed_node = fixed_node  # {'function':func, 'g_matrix':g_mat}
         self.excited_state_imp_samp = excited_state_imp_samp
@@ -620,6 +628,14 @@ class DMC_Sim:
         """
         return _imp_move_randomly_data_parallel(self)
 
+    def _imp_move_randomly_selected(self):
+        """Run the configured importance-sampling displacement implementation."""
+        if self.second_impsamp_displacement:
+            return self.imp_move_randomly_second_type()
+        if self.use_data_parallel_imp_move:
+            return self.imp_move_randomly_data_parallel()
+        return self.imp_move_randomly()
+
     def imp_move_randomly_second_type(self):
         """
         The random displacement of each of the coordinates of each of the walkers, done in a vectorized fashion. Displaces self._walker_coords
@@ -783,10 +799,7 @@ class DMC_Sim:
                 self.move_randomly()
             else:
                 start = time.time()
-                if self.second_impsamp_displacement:
-                    rejected = self.imp_move_randomly_second_type()
-                else:
-                    rejected = self.imp_move_randomly()
+                rejected = self._imp_move_randomly_selected()
                 if prop_step in self._log_steps:
                     self._logger.write_rejections(rejected, len(self._walker_coords))
                     self._logger.write_imp_disp_time(time.time() - start)
