@@ -41,6 +41,14 @@ IMPORTANT REQUIREMENTS:
 
 * The Python file that holds the function that calculates the trial wave function (and optionally the derivatives) MUST be in the same directory as the Python file that calls the potential energy surface. This is a restrictive measure that was put in to make calls cleaner inside PyVibDMC, as sometimes the current working directory matters when one loads in data files on-the-fly and things of the like.
 
+* External trial-wavefunction derivative code should be written to avoid unnecessary large temporaries inside inner loops. This is best handled in the trial-wavefunction implementation itself, rather than relying only on runtime settings.
+
+  NumPy operations, or PyTorch if used in custom trial code, may automatically use threaded BLAS/OpenMP libraries. When trial-wavefunction or derivative calls are already parallelized with multiprocessing, those internal thread pools can oversubscribe the CPU. For these workloads, it is often best to set the relevant thread counts to one before importing NumPy, PyTorch, or running the simulation::
+
+      export OMP_NUM_THREADS=1
+      export OPENBLAS_NUM_THREADS=1
+      export MKL_NUM_THREADS=1
+
 There are three importance sampling managers: ``ImpSampManager``, ``ImpSampManager_NoMP``, and ``MPI_ImpSampManager``. The first two can
 easily be used with PyVibDMC::
 
