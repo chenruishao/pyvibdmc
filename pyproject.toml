@@ -11,7 +11,7 @@ dynamic = ["version"]
 description = "PyVibDMC, A general purpose diffusion monte carlo code for studying vibrational problems"
 readme = "README.md"
 license = {text = "MIT"}
-requires-python = ">=3.9"
+requires-python = ">=3.6"
 
 classifiers = [
     "Operating System :: POSIX :: Linux",
@@ -24,6 +24,7 @@ classifiers = [
 Homepage = "http://pyvibdmc.readthedocs.io/"
 
 [tool.setuptools_scm]
+version_file = "pyvibdmc/_version.py"
 
 [tool.setuptools.packages.find]
 where = ["."]

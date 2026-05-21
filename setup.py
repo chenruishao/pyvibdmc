@@ -27,7 +27,7 @@ setup(
     long_description=long_description,
     long_description_content_type="text/markdown",
     use_scm_version=True,
-    setup_requires=['setuptools_scm'] + pytest_runner,
+    setup_requires=['setuptools-scm[simple]>=9.2'] + pytest_runner,
     license='MIT',
 
     # Which Python importable modules should be included when your package is installed
@@ -48,7 +48,7 @@ setup(
                'Mac OS-X',
                'Unix',
                'Windows'],            # Valid platforms your code works on, adjust to your flavor
-    python_requires=">=3.5",          # Python version restrictions
+    python_requires=">=3.6",          # Python version restrictions
 
     # Manual control if final package is compressible or not, set False to prevent the .egg from being made
     # zip_safe=False,
