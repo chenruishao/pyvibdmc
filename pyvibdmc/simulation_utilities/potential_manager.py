@@ -3,10 +3,45 @@ import os
 import sys
 import time
 import importlib
+import traceback
 
 import numpy as np
 
 __all__ = ['Potential', 'Potential_NoMP', 'NN_Potential', 'Potential_Direct']
+
+
+_RESERVED_POT_STOP = ("PYVIBDMC_RESERVED_POT_STOP",)
+_RESERVED_POT_CALL = "PYVIBDMC_RESERVED_POT_CALL"
+_RESERVED_TASK_QUEUE = None
+_RESERVED_RESULT_QUEUE = None
+
+
+def _init_reserved_potential_queues(task_queue, result_queue):
+    global _RESERVED_TASK_QUEUE, _RESERVED_RESULT_QUEUE
+    _RESERVED_TASK_QUEUE = task_queue
+    _RESERVED_RESULT_QUEUE = result_queue
+
+
+def _reserved_potential_worker(pot_func):
+    """Long-lived potential worker used to pin single-core potential calls to one process."""
+    while True:
+        task = _RESERVED_TASK_QUEUE.get()
+        if task == _RESERVED_POT_STOP:
+            return
+
+        tag, task_id, cds, pot_kwargs = task
+        if tag != _RESERVED_POT_CALL:
+            _RESERVED_RESULT_QUEUE.put((task_id, False, None, f"Unknown reserved potential task tag: {tag!r}"))
+            continue
+
+        try:
+            if pot_kwargs is None:
+                result = pot_func(cds)
+            else:
+                result = pot_func(cds, pot_kwargs)
+            _RESERVED_RESULT_QUEUE.put((task_id, True, result, None))
+        except BaseException:
+            _RESERVED_RESULT_QUEUE.put((task_id, False, None, traceback.format_exc()))
 
 
 class Potential:
@@ -17,7 +52,7 @@ class Potential:
     :type potential_function: str
     :param potential_dir: The *absolute path* to the directory that contains the .so file and .py file. If it"s a python function, then just the absolute path to your .py file.
     :type: str
-    :param num_cores: Will create a pool of <num_cores> processes using Python"s multiprocessing module. This should never be larger than the number of processors on the machine this code is run.
+    :param num_cores: Number of chunks used for potential energy calls. This also sets the initial multiprocessing pool size. The pool may later be enlarged when sharing it with importance sampling.
     :type: int
     """
 
@@ -33,6 +68,12 @@ class Potential:
         self.python_file = python_file
         self.potential_directory = potential_directory
         self.num_cores = num_cores
+        self.pool_num_cores = num_cores
+        self._reserved_task_queue = None
+        self._reserved_result_queue = None
+        self._reserved_pot_workers = []
+        self._reserved_task_counter = 0
+        self._reservation_active = False
         self.pass_timestep = pass_timestep
         self.pot_kwargs = pot_kwargs
         if self.pass_timestep:
@@ -60,6 +101,8 @@ class Potential:
         if self.num_cores <= 0:
             print('Weird number of cores specified. Defaulting to 1...')
             self.num_cores = 1
+        if self.pool_num_cores < self.num_cores:
+            self.pool_num_cores = self.num_cores
         # TODO: mp.Pool() still uses the platform default start method. On
         # Python 3.12/Linux this may fork from a multithreaded parent and warn
         # or deadlock; Python 3.14 changes the POSIX default to forkserver, but
@@ -67,8 +110,94 @@ class Potential:
         # inheriting the parent-imported self._pot. Refactor to use an explicit
         # context, a worker initializer, and a module-level worker call wrapper.
         self._init_pot()
-        self._potPool = mp.Pool(self.num_cores)
+        self._reserved_task_queue = mp.Queue()
+        self._reserved_result_queue = mp.Queue()
+        self._potPool = mp.Pool(self.pool_num_cores,
+                                initializer=_init_reserved_potential_queues,
+                                initargs=(self._reserved_task_queue, self._reserved_result_queue))
         os.chdir(self._curdir)
+
+    def _start_reserved_potential_workers(self, num_workers=1):
+        if self._reservation_active:
+            return
+        if self._potPool is None:
+            raise RuntimeError("Cannot reserve potential workers before the pool is initialized.")
+        if num_workers != 1:
+            raise NotImplementedError("Reserved potential workers currently support only num_workers=1.")
+        if self.pool_num_cores <= self.num_cores:
+            raise ValueError("Reserved potential workers require extra shared-pool capacity.")
+
+        self._reserved_pot_workers = [
+            self._potPool.apply_async(_reserved_potential_worker, (self._pot,))
+            for _ in range(num_workers)
+        ]
+        self._reservation_active = True
+
+    def _stop_reserved_potential_workers(self):
+        if not self._reservation_active:
+            return
+
+        for _ in self._reserved_pot_workers:
+            self._reserved_task_queue.put(_RESERVED_POT_STOP)
+
+        worker_errors = []
+        for worker in self._reserved_pot_workers:
+            try:
+                worker.get(timeout=10)
+            except BaseException as exc:
+                worker_errors.append(exc)
+
+        self._reserved_pot_workers = []
+        self._reservation_active = False
+
+        if worker_errors:
+            raise RuntimeError("Reserved potential worker did not shut down cleanly.") from worker_errors[0]
+
+    def _close_reserved_queues(self):
+        for queue_attr in ("_reserved_task_queue", "_reserved_result_queue"):
+            queue = getattr(self, queue_attr)
+            if queue is None:
+                continue
+            try:
+                queue.close()
+                queue.join_thread()
+            finally:
+                setattr(self, queue_attr, None)
+
+    def _getpot_reserved(self, cds):
+        self._reserved_task_counter += 1
+        task_id = self._reserved_task_counter
+        if self.pot_kwargs is None:
+            pot_kwargs = None
+        else:
+            try:
+                pot_kwargs = self.pot_kwargs.copy()
+            except AttributeError:
+                pot_kwargs = self.pot_kwargs
+        self._reserved_task_queue.put((_RESERVED_POT_CALL, task_id, cds, pot_kwargs))
+
+        while True:
+            result_task_id, ok, result, err = self._reserved_result_queue.get()
+            if result_task_id != task_id:
+                continue
+            if ok:
+                return result
+            raise RuntimeError(f"Reserved potential worker failed:\n{err}")
+
+    def resize_pool(self, num_cores):
+        """Ensure the backing pool has at least num_cores workers without changing potential-call chunking."""
+        if num_cores <= 0:
+            raise ValueError("Potential pool requires num_cores > 0.")
+        if num_cores <= self.pool_num_cores:
+            return
+        self._stop_reserved_potential_workers()
+        if self._potPool is not None:
+            self._potPool.close()
+            self._potPool.join()
+            self._potPool = None
+        self._close_reserved_queues()
+        self.pool_num_cores = num_cores
+        self._init_pool()
 
     @property
     def pool(self):
@@ -85,7 +214,9 @@ class Potential:
         """
         if timeit:
             start = time.time()
-        if self._potPool is not None:
+        if self._reservation_active:
+            v = self._getpot_reserved(cds)
+        elif self._potPool is not None:
             from itertools import repeat
             cds = np.array_split(cds, self.num_cores)
             if self.pot_kwargs is not None:
@@ -106,10 +237,25 @@ class Potential:
             return v
 
     def mp_close(self):
+        reserved_shutdown_error = None
+        try:
+            self._stop_reserved_potential_workers()
+        except BaseException as exc:
+            reserved_shutdown_error = exc
+
         if self._potPool is not None:
-            self._potPool.close()
-            self._potPool.join()
+            if reserved_shutdown_error is None:
+                self._potPool.close()
+                self._potPool.join()
+            else:
+                self._potPool.terminate()
+                self._potPool.join()
             self._potPool = None
+
+        self._close_reserved_queues()
+
+        if reserved_shutdown_error is not None:
+            raise reserved_shutdown_error
 
 
 class Potential_NoMP:

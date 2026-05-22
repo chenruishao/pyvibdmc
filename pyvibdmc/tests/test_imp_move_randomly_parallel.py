@@ -109,6 +109,11 @@ def test_imp_move_randomly_data_parallel_matches_existing_method(tmp_path, poten
             assert new_imp.num_cores == potential_num_cores
         else:
             assert new_imp.num_cores == imp_num_cores
+        assert new_potential.num_cores == potential_num_cores
+        expected_pool_num_cores = max(potential_num_cores, new_imp.num_cores)
+        if potential_num_cores == 1 and new_imp.num_cores > 1:
+            expected_pool_num_cores = new_imp.num_cores + 1
+        assert new_potential.pool_num_cores == expected_pool_num_cores
         _assert_move_results_match(old_sim, new_sim, old_rejections, new_rejections)
     finally:
         _close_sim(old_sim, old_imp, old_potential)

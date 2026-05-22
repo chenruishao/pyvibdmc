@@ -141,6 +141,7 @@ def _single_step_dmc(result_path,
     imp_metadata = {}
     if importance_sampling:
         imp_samp, imp_metadata = _importance_sampler(potential, imp_num_cores=imp_num_cores)
+        potential_metadata["potential_num_cores"] = potential.num_cores
 
     myDMC = pv.DMC_Sim(sim_name="propagate_once_test",
                        output_folder=str(output_folder),

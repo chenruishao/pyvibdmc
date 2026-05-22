@@ -55,8 +55,22 @@ class ImpSampManager:
 
     def _initialize_pool(self):
         if isinstance(self.pot_manager, Potential):
-            num_cores = self.pot_manager.num_cores if self.imp_num_cores is None else self.imp_num_cores
-            self._create_pool(num_cores)
+            use_reserved_potential_worker = False
+            if self.imp_num_cores is not None:
+                if self.imp_num_cores <= 0:
+                    raise ValueError("ImpSampManager requires num_cores > 0.")
+                use_reserved_potential_worker = self.pot_manager.num_cores == 1 and self.imp_num_cores > 1
+                pool_num_cores = self.imp_num_cores + 1 if use_reserved_potential_worker else self.imp_num_cores
+                self.pot_manager.resize_pool(pool_num_cores)
+                self.num_cores = self.imp_num_cores
+            else:
+                self.num_cores = self.pot_manager.num_cores
+            self.pool = self.pot_manager.pool
+            self.pool_num_cores = self.pot_manager.pool_num_cores
+            self._owns_pool = False
+            self._reinit_pool()
+            if use_reserved_potential_worker:
+                self.pot_manager._start_reserved_potential_workers()
             return
 
         if self.imp_num_cores is None:
@@ -79,6 +93,7 @@ class ImpSampManager:
         # start methods. Consider spawn/forkserver or centralized pool creation.
         self.pool = Pool(num_cores)
         self.num_cores = num_cores
+        self.pool_num_cores = num_cores
         self._owns_pool = True
         self._reinit_pool()
 
@@ -107,7 +122,7 @@ class ImpSampManager:
 
     def _reinit_pool(self):
         """Imports the appropriate modules that are in the potential_manager directory"""
-        empt = [() for _ in range(self.num_cores)]
+        empt = [() for _ in range(self.pool_num_cores)]
         self._init_wfn_mp(chdir=True)
         self.pool.starmap(self._init_wfn_mp, empt, chunksize=1)
 
