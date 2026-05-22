@@ -21,7 +21,7 @@ PyVibDMC is tested on and is for Mac and Linux architectures.
 If using Windows, please use Windows Subsystem for Linux (WSL). However, there are a few known issues with how PyVibDMC
 interacts with WSL. These include:
 
-- (WSL v1) After a complete simulation, if using parallelization, the python process may hang until manually terminated. The way to currently circumvent this is through calling ``mp_close()`` on each multiprocessing manager at the end of your run script. For a multiprocessing ``Potential`` without importance sampling, call ``pm.Potential.mp_close()``. If using ``ImpSampManager`` with a multiprocessing ``Potential``, call both ``imp_samp.mp_close()`` and ``potential.mp_close()`` because they own separate worker pools.
+- (WSL v1) After a complete simulation, if using parallelization, the python process may hang until manually terminated. The way to currently circumvent this is through calling ``mp_close()`` on each multiprocessing manager at the end of your run script. For a multiprocessing ``Potential`` without importance sampling, call ``pm.Potential.mp_close()``. If using ``ImpSampManager`` with a multiprocessing ``Potential``, call both ``imp_samp.mp_close()`` and ``potential.mp_close()``; the importance sampler call is currently a no-op in this shared-pool case, and ``Potential`` owns the worker pool.
 - (WSL v2) If a Fortran potential reads a data file during its F2PY function call, it will seg fault or be unable to read the data file.
 
 These issues are not present on Mac or Linux.

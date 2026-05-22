@@ -33,11 +33,13 @@ difference.
 
 IMPORTANT REQUIREMENTS:
 
-* The potential manager is responsible for setting up the parallelization in the importance sampling. If one is using multiprocessing in the potential manager, the importance sampling will be parallelized with a separate multiprocessing pool, MPI for MPI, and single-core for single-core.
+* The potential manager is responsible for setting up the parallelization in the importance sampling. If one is using multiprocessing in the potential manager, construct the ``Potential`` first and pass that ``pot_manager`` to ``ImpSampManager``. For ``Potential`` plus ``ImpSampManager``, both potential and importance-sampling calls use one shared multiprocessing pool owned by ``Potential``. MPI remains MPI, and single-core remains single-core.
 
-  * With ``Potential`` and ``ImpSampManager``, ``Potential(num_cores=...)`` controls the potential-only pool. ``ImpSampManager(imp_num_cores=...)`` controls the importance-sampling-only pool and defaults to ``Potential.num_cores`` if not provided. DMC propagation uses these pools sequentially, so active CPU use is bounded by the currently running operation, while resident memory includes both pools.
+  * With ``Potential`` and ``ImpSampManager``, ``Potential(num_cores=...)`` creates the shared pool and keeps that value as the potential-call chunk count. ``ImpSampManager(imp_num_cores=...)`` may enlarge that shared pool before reusing it, but it does not change ``Potential.num_cores``. If ``imp_num_cores`` is not provided, ``ImpSampManager`` uses the ``Potential`` chunk count.
 
-  * The one exception to this rule is when using a NN_Potential. One can pass the ``new_pool_num_cores`` argument in order to use ImpSampManager, which uses multiprocessing, if using Potential_NoMP or NN_Potential.
+  * If ``Potential(num_cores=1)`` is paired with a larger ``ImpSampManager(imp_num_cores=...)``, one shared-pool worker is reserved for potential calls. The total pool size is therefore ``imp_num_cores + 1``: one process keeps potential/model state local, and ``imp_num_cores`` processes remain available for importance-sampling work.
+
+  * The one exception to this rule is when using a ``Potential_NoMP`` or ``NN_Potential``. One can pass the ``new_pool_num_cores`` argument in order to use ``ImpSampManager`` with a new multiprocessing pool because those potential managers do not own one.
 
 * The Python file that holds the function that calculates the trial wave function (and optionally the derivatives) MUST be in the same directory as the Python file that calls the potential energy surface. This is a restrictive measure that was put in to make calls cleaner inside PyVibDMC, as sometimes the current working directory matters when one loads in data files on-the-fly and things of the like.
 
@@ -78,13 +80,13 @@ easily be used with PyVibDMC::
     water_pot = pv.Potential(potential_function=pot_func,
                           python_file=py_file,
                           potential_directory=pot_dir,
-                          num_cores=2) #potential uses its own pool of workers
+                          num_cores=2) #potential-call chunk count and initial shared pool size
 
     water_imp = pv.ImpSampManager(trial_function,
                          trial_directory, #same as potential_directory
                          python_file,
                          pot_manager=water_pot,
-                         imp_num_cores=..., #optional, separate pool size; defaults to Potential.num_cores
+                         imp_num_cores=..., #optional, may enlarge the shared Potential pool
                          deriv_function=..., #optional string like trial_function
                          trial_kwargs=..., #May pass a dict with important things to trial function call
                          deriv_kwargs=..., #May pass a dict with important things to deriv function call - only use if deriv_function is set to something
@@ -96,7 +98,8 @@ easily be used with PyVibDMC::
                                                # Defaults to False.
                         ...)
 
-    # Close both multiprocessing pools after the simulation finishes.
+    # Close multiprocessing resources after the simulation finishes.
+    # water_imp.mp_close() is a no-op for this shared-pool case; water_pot owns the pool.
     water_imp.mp_close()
     water_pot.mp_close()
 

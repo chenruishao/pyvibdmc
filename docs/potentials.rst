@@ -29,17 +29,20 @@ do this. The only argument you need to use in order to take advantage of this is
                           potential_directory=pot_dir,
                           num_cores=2)
 
-The ``num_cores`` parameter specifies the number of worker processes used for potential energy calls.
-When the same ``Potential`` object is also used with ``ImpSampManager()``, the importance sampler creates
-a separate pool with the same number of worker processes for trial-wavefunction and derivative calls.
-DMC propagation uses the potential and importance-sampling pools sequentially, but both pools remain
-resident in memory. Setting a separate number of cores in ``ImpSampManager(imp_num_cores=...)`` is
-possible and can be useful when the potential and trial-wavefunction calls have different parallelism
-requirements. For example, GPU neural-network potentials are often best evaluated without splitting the
-batch across many Python worker processes, while CPU neural-network potentials should be benchmarked
-because PyTorch or BLAS threading may provide useful parallelism inside a single process.
+The ``num_cores`` parameter specifies the number of chunks used for potential energy calls.
+When the same ``Potential`` object is also used with ``ImpSampManager()``, construct ``Potential`` first and
+pass it as the importance sampler's ``pot_manager``. The two managers share one multiprocessing pool owned
+by ``Potential``. Setting ``ImpSampManager(imp_num_cores=...)`` may enlarge the ``Potential`` pool before the
+importance sampler reuses it, but it does not change ``Potential.num_cores``. Later potential calls keep using
+the potential chunk count, while importance-sampling calls use ``imp_num_cores``. If ``Potential(num_cores=1)``
+is paired with a larger ``ImpSampManager(imp_num_cores=...)``, PyVibDMC reserves one worker in the shared pool
+for potential calls so repeated potential evaluations use the same process. This is useful for GPU or large
+model potentials that lazily initialize process-local model state. In this case the total shared pool size is
+``imp_num_cores + 1``.
 
-Close both pools after the simulation with ``imp_samp.mp_close()`` and ``potential.mp_close()``.
+Close multiprocessing resources after the simulation with ``imp_samp.mp_close()`` and ``potential.mp_close()``.
+For ``Potential`` plus ``ImpSampManager``, ``imp_samp.mp_close()`` is a no-op because ``Potential`` owns the
+shared pool.
 Each Python process takes up 1 core. The number of walkers does not need to be divisible by the number
 of cores/processes.
 
