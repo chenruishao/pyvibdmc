@@ -867,7 +867,16 @@ class DMC_Sim:
 
             # 4. Update Vref.
             self.calc_vref()
+            # TODO: Ensure the # of walkers saved here is the same as the printout
+            # I don't find a reason why n_walker would differ from what is saved in the output txt file with the hdf5 file
+            assert ensemble_changes[2] == len(self._walker_coords), "Walker coordinate saved to txt output is different!"
             self.update_sim_arrays(prop_step)
+            # Crude logging fix to make the log average energy saved in the txt file to be identical to that of the hdf5 file.
+            if prop_step in self._log_steps:
+                maxpot = np.amax(self._walker_pots)
+                minpot = np.amin(self._walker_pots)
+                avgpot = np.average(self._walker_pots)
+                self._logger.write_pot_time(prop_step, pot_time, maxpot, minpot, avgpot)
 
             if self._desc_wt and self._deb_desc_wt_tracker:
                 self.calc_desc_wts()
