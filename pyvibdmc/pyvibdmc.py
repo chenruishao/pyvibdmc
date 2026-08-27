@@ -876,7 +876,9 @@ class DMC_Sim:
                 maxpot = np.amax(self._walker_pots)
                 minpot = np.amin(self._walker_pots)
                 avgpot = np.average(self._walker_pots)
+                vref = self._vref
                 self._logger.write_pot_time(prop_step, pot_time, maxpot, minpot, avgpot)
+                self._logger.write_pot_time(prop_step, pot_time, maxpot, minpot, vref)
 
             if self._desc_wt and self._deb_desc_wt_tracker:
                 self.calc_desc_wts()
