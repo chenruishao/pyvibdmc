@@ -212,6 +212,48 @@ def test_drift_serial_matches_nomp_drift_with_finite_difference():
         np.testing.assert_allclose(serial_val, drift_val)
 
 
+def test_local_energy_logging_respects_log_every(tmp_path):
+    pot_dir = os.path.join(os.path.dirname(__file__), '../sample_potentials/PythonPots/')
+    potential = pv.Potential_NoMP(potential_function='oh_stretch_harm',
+                                  python_file='harmonicOscillator1D.py',
+                                  potential_directory=pot_dir)
+    imp_samp = pv.ImpSampManager_NoMP(trial_function='trial_harm',
+                                      trial_directory=pot_dir,
+                                      python_file='harm_trial_wfn.py',
+                                      deriv_function='derivative',
+                                      chdir=True)
+    output_folder = tmp_path / "local_energy_log_cadence"
+    sim = pv.DMC_Sim(sim_name="local_energy_log_cadence",
+                     output_folder=str(output_folder),
+                     weighting='discrete',
+                     num_walkers=100,
+                     num_timesteps=5,
+                     equil_steps=10,
+                     chkpt_every=100,
+                     wfn_every=100,
+                     desc_wt_steps=1,
+                     atoms=["O-H"],
+                     delta_t=1,
+                     potential=potential,
+                     second_impsamp_displacement=True,
+                     imp_samp=imp_samp,
+                     imp_samp_oned=True,
+                     log_every=2,
+                     start_structures=np.zeros((1, 1, 1)))
+
+    try:
+        sim.propagate()
+        sim._logger.fl.flush()
+    finally:
+        sim._logger.fl.close()
+
+    log_text = (output_folder / "local_energy_log_cadence_log.txt").read_text()
+    log_blocks = log_text.split("Time step ")[1:]
+
+    assert [int(block.splitlines()[0]) for block in log_blocks] == [0, 2, 4]
+    assert all(block.count("Average local energy of ensemble:") == 1 for block in log_blocks)
+
+
 def test_run_dmc_short():
     import shutil
     if os.path.isdir(sim_ex_dir):
