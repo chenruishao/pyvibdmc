@@ -44,6 +44,10 @@ class SimLogger:
         self.fl.write(f"\tHighest energy walker: {maxpot} cm-1\n")
         self.fl.write(f"\tLowest energy walker: {minpot} cm-1\n")
 
+    def write_vref(self, vref):
+        vref = Constants.convert(vref, 'wavenumbers', to_AU=False)
+        self.fl.write(f"\tReference energy (Vref): {vref} cm-1\n")
+
     def write_local(self, local_energy):
         avg_l = Constants.convert(local_energy, 'wavenumbers', to_AU=False)
         self.fl.write(f"\tAverage local energy of ensemble: {avg_l} cm-1 \n")
