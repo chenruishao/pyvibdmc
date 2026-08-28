@@ -832,7 +832,8 @@ class DMC_Sim:
                 self._walker_pots = self._walker_pots + local_ke
                 if self.excited_state_imp_samp:
                     self._walker_pots = self._vref - (self._vref - self._walker_pots) * self.vector_score
-                self._logger.write_local(np.average(self._walker_pots))
+                if prop_step in self._log_steps:
+                    self._logger.write_local(np.average(self._walker_pots))
 
             # Uncomment if you want to collect the local energy as well as the potential energy for training data
             # if prop_step in self.deb_train_save_step:
