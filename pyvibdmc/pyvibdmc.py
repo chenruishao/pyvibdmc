@@ -810,6 +810,7 @@ class DMC_Sim:
                 maxpot = np.amax(self._walker_pots)
                 minpot = np.amin(self._walker_pots)
                 avgpot = np.average(self._walker_pots)
+                # Logs energy info before branching step. Should not be used for reference energy calculation.
                 self._logger.write_pot_time(prop_step, pot_time, maxpot, minpot, avgpot)
             else:
                 self._walker_pots = self.potential(self._walker_coords)
@@ -867,18 +868,11 @@ class DMC_Sim:
 
             # 4. Update Vref.
             self.calc_vref()
-            # TODO: Ensure the # of walkers saved here is the same as the printout
-            # I don't find a reason why n_walker would differ from what is saved in the output txt file with the hdf5 file
-            assert ensemble_changes[2] == len(self._walker_coords), "Walker coordinate saved to txt output is different!"
             self.update_sim_arrays(prop_step)
-            # Crude logging fix to make the log average energy saved in the txt file to be identical to that of the hdf5 file.
+            # Log reference energy, it should be noticed that the logged reference energy cannot be re-constructed from the average energy, 
+            # as the average energy saved above is for all walkers before the branching step.
             if prop_step in self._log_steps:
-                maxpot = np.amax(self._walker_pots)
-                minpot = np.amin(self._walker_pots)
-                avgpot = np.average(self._walker_pots)
-                vref = self._vref
-                self._logger.write_pot_time(prop_step, pot_time, maxpot, minpot, avgpot)
-                self._logger.write_pot_time(prop_step, pot_time, maxpot, minpot, vref)
+                self._logger.write_vref(self._vref)
 
             if self._desc_wt and self._deb_desc_wt_tracker:
                 self.calc_desc_wts()
